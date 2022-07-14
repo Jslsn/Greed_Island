@@ -9,12 +9,39 @@ resource "aws_vpc" "vpc" {
     Terraform   = "True"
   }
 }
-resource "aws_subnet" "private_subnet" {
-  vpc_id            = aws_vpc.vpc.id
-  cidr_block        = "10.0.0.0/24"
-  availability_zone = "us-east-1a"
+
+resource "aws_internet_gateway" "internet_gateway" {
+  vpc_id = aws_vpc.vpc.id
   tags = {
-    Name      = var.private_subnet
+    Name = "jl_prac_igw"
+  }
+}
+
+resource "aws_route_table" "public_route_table" {
+  vpc_id = aws_vpc.vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.internet_gateway.id
+  }
+  tags = {
+    Name      = "public_facing_route_table"
+    Terraform = true
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  depends_on     = [aws_subnet.public_subnet]
+  route_table_id = aws_route_table.public_route_table.id
+  subnet_id      = aws_subnet.public_subnet.id
+}
+
+resource "aws_subnet" "public_subnet" {
+  vpc_id                  = aws_vpc.vpc.id
+  cidr_block              = "10.0.0.0/24"
+  availability_zone       = "us-east-1a"
+  map_public_ip_on_launch = true
+  tags = {
+    Name      = var.public_subnet
     Terrafrom = true
   }
 }
@@ -31,11 +58,64 @@ data "aws_ami" "ubuntu" {
   }
   owners = ["099720109477"]
 }
+
+resource "aws_ebs_volume" "jenkins_root" {
+  availability_zone = "us-east-1a"
+  size              = 10
+  tags = {
+    Name = "jenkins_instance_root_volume"
+  }
+}
+
 resource "aws_instance" "jenkins_instance" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "t2.micro"
-  subnet_id     = aws_subnet.private_subnet.id
+  subnet_id     = aws_subnet.public_subnet.id
+  user_data     = file("init.sh")
+  security_groups = [aws_security_group.allow_ssh_and_jenkins.id]
   tags = {
     Name = "Ubuntu Jenkins Instance"
   }
+}
+
+resource "aws_volume_attachment" "jenkins_volume_attachment" {
+  device_name = "/dev/sdh"
+  volume_id   = aws_ebs_volume.jenkins_root.id
+  instance_id = aws_instance.jenkins_instance.id
+}
+
+resource "aws_security_group" "allow_ssh_and_jenkins" {
+  name        = "jenkins_instance_sg"
+  description = "Allow ssh and port 8080 inbound"
+  vpc_id      = aws_vpc.vpc.id
+  tags = {
+    Name      = "jenkins_instance_sg"
+    Terraform = true
+  }
+}
+
+resource "aws_security_group_rule" "allow_ssh" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.allow_ssh_and_jenkins.id
+}
+
+resource "aws_security_group_rule" "allow_jenkins" {
+  type              = "ingress"
+  from_port         = 8080
+  to_port           = 8080
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.allow_ssh_and_jenkins.id
+}
+resource "aws_security_group_rule" "allow_outbound" {
+  type              = "egress"
+  from_port         = -1
+  to_port           =  -1
+  protocol          = "all"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.allow_ssh_and_jenkins.id
 }
