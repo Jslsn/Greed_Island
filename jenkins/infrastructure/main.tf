@@ -59,29 +59,15 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"]
 }
 
-resource "aws_ebs_volume" "jenkins_root" {
-  availability_zone = "us-east-1a"
-  size              = 10
-  tags = {
-    Name = "jenkins_instance_root_volume"
-  }
-}
-
 resource "aws_instance" "jenkins_instance" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.public_subnet.id
-  user_data     = file("init.sh")
+  ami             = data.aws_ami.ubuntu.id
+  instance_type   = "t2.micro"
+  subnet_id       = aws_subnet.public_subnet.id
+  user_data       = file("init.sh")
   security_groups = [aws_security_group.allow_ssh_and_jenkins.id]
   tags = {
     Name = "Ubuntu Jenkins Instance"
   }
-}
-
-resource "aws_volume_attachment" "jenkins_volume_attachment" {
-  device_name = "/dev/sdh"
-  volume_id   = aws_ebs_volume.jenkins_root.id
-  instance_id = aws_instance.jenkins_instance.id
 }
 
 resource "aws_security_group" "allow_ssh_and_jenkins" {
@@ -114,7 +100,7 @@ resource "aws_security_group_rule" "allow_jenkins" {
 resource "aws_security_group_rule" "allow_outbound" {
   type              = "egress"
   from_port         = -1
-  to_port           =  -1
+  to_port           = -1
   protocol          = "all"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.allow_ssh_and_jenkins.id
