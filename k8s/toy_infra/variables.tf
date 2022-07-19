@@ -17,10 +17,3 @@ variable "public_subnets" {
     "public_subnet_3" = 3
   }
 }
-variable "private_subnets" {
-  default = {
-    "private_subnet_1" = 1
-    "private_subnet_2" = 2
-    "private_subnet_3" = 3
-  }
-}
